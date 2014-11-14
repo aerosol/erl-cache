@@ -201,7 +201,7 @@ purge_cache(Name) ->
     {Time, Deleted} = timer:tc(
         ets, select_delete,
         [get_table_name(Name), [{#cache_entry{evict='$1', _='_'}, [{'<', '$1', Now}], [true]}]]),
-    ?INFO("~p cache purged in ~pms", [Name, Time]),
+    ?DEBUG("~p cache purged in ~pms", [Name, Time]),
     gen_server:cast(Name, {increase_stat, evict, Deleted}),
     ok.
 
