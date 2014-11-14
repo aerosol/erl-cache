@@ -142,10 +142,10 @@ handle_call(_Request, _From, State) ->
 
 %% @private
 -spec handle_cast(any(), #state{}) -> {noreply, #state{}}.
-handle_cast({increase_stat, Stat}, #state{stats=Stats} = State) ->
-    {noreply, State#state{stats=update_stats(Stat, Stats)}};
-handle_cast({increase_stat, Stat, N}, #state{stats=Stats} = State) ->
-    {noreply, State#state{stats=update_stats(Stat, N, Stats)}};
+handle_cast({increase_stat, Stat}, #state{name=Name, stats=Stats} = State) ->
+    {noreply, State#state{stats=update_stats(Name, Stat, Stats)}};
+handle_cast({increase_stat, Stat, N}, #state{name=Name, stats=Stats} = State) ->
+    {noreply, State#state{stats=update_stats(Name, Stat, N, Stats)}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -197,11 +197,15 @@ do_evict(Name, Key) ->
 %% @private
 -spec purge_cache(erl_cache:name()) -> ok.
 purge_cache(Name) ->
+    NameBin = atom_to_binary(Name, latin1),
+    TimerName = <<"erl_cache.purge.", NameBin/binary>>,
+    Timer = folsom_metrics:histogram_timed_begin(TimerName),
     Now = now_ms(),
     {Time, Deleted} = timer:tc(
         ets, select_delete,
         [get_table_name(Name), [{#cache_entry{evict='$1', _='_'}, [{'<', '$1', Now}], [true]}]]),
     ?DEBUG("~p cache purged in ~pms", [Name, Time]),
+    ok = safely_histogram_timed_notify(Timer),
     gen_server:cast(Name, {increase_stat, evict, Deleted}),
     ok.
 
@@ -270,13 +274,17 @@ is_error_value(F, Value) when is_function(F) ->
     F(Value).
 
 %% @private
--spec update_stats(hit|miss|overdue|evict|set, dict()) -> dict().
-update_stats(Stat, Stats) ->
-    update_stats(Stat, 1, Stats).
+-spec update_stats(erl_cache:name(), hit|miss|overdue|evict|set, dict()) -> dict().
+update_stats(Name, Stat, Stats) ->
+    update_stats(Name, Stat, 1, Stats).
 
 %% @private
--spec update_stats(hit|miss|overdue|evict|set, pos_integer(), dict()) -> dict().
-update_stats(Stat, N, Stats) ->
+-spec update_stats(erl_cache:name(), hit|miss|overdue|evict|set, pos_integer(), dict()) -> dict().
+update_stats(Name, Stat, N, Stats) ->
+    NameBin = atom_to_binary(Name, latin1),
+    StatBin = atom_to_binary(Stat, latin1),
+    Spiral = <<"erl_cache.stats.", NameBin/binary, ".", StatBin/binary>>,
+    safely_notify_spiral(Spiral, N),
     dict:update_counter(total_ops, N, dict:update_counter(Stat, N, Stats)).
 
 %% @private
@@ -295,3 +303,20 @@ get_table_name(Name) ->
 to_atom(Str) ->
     try list_to_existing_atom(Str) catch error:badarg -> list_to_atom(Str) end.
 
+safely_histogram_timed_notify({Name, _} = Timer) ->
+     try
+         ok = folsom_metrics:histogram_timed_notify(Timer)
+     catch _:_ ->
+             folsom_metrics:new_histogram(Name),
+             folsom_metrics:safely_histogram_timed_notify(Timer)
+     end.
+
+safely_notify_spiral(Spiral, Value) ->
+    case folsom_metrics:safely_notify({Spiral, Value}) of
+        ok -> ok;
+        {error, Spiral, nonexistent_metric} ->
+            folsom_metrics:new_spiral(Spiral),
+            folsom_metrics:safely_notify({Spiral, Value});
+        Error ->
+            Error
+    end.

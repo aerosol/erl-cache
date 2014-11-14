@@ -1,3 +1,4 @@
+%%% -*- mode: erlang -*-
 {application, erl_cache,
  [
   {description, ""},
@@ -5,7 +6,8 @@
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+                  folsom
                  ]},
   {mod, { erl_cache_app, []}},
   {env, []}

@@ -19,9 +19,11 @@ setup() ->
     Old = application:get_env(erl_cache, cache_servers),
     ok = application:set_env(erl_cache, cache_servers,
                              [{?TEST_CACHE, [{wait_for_refresh, false}]}]),
+    {ok, _} = application:ensure_all_started(folsom),
     ok = erl_cache:start(),
     error_logger:tty(false),
     [fun () -> application:stop(erl_cache) end,
+     fun () -> application:stop(folsom) end,
      fun () -> case Old of
                     undefined -> application:unset_env(erl_cache, wait_for_refresh);
                     {ok, Val} -> application:set_env(erl_cache, wait_for_refresh, Val)
