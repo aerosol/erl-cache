@@ -29,7 +29,7 @@
 -record(state, {
     name::erl_cache:name(),                     %% The name of this cache instance
     cache::ets:tid(),                           %% Holds cache
-    stats::dict()                               %% Statistics about cache hits
+    stats::dict:dict()                               %% Statistics about cache hits
 }).
 
 -record(cache_entry, {
@@ -274,12 +274,12 @@ is_error_value(F, Value) when is_function(F) ->
     F(Value).
 
 %% @private
--spec update_stats(erl_cache:name(), hit|miss|overdue|evict|set, dict()) -> dict().
+-spec update_stats(erl_cache:name(), hit|miss|overdue|evict|set, dict:dict()) -> dict:dict().
 update_stats(Name, Stat, Stats) ->
     update_stats(Name, Stat, 1, Stats).
 
 %% @private
--spec update_stats(erl_cache:name(), hit|miss|overdue|evict|set, pos_integer(), dict()) -> dict().
+-spec update_stats(erl_cache:name(), hit|miss|overdue|evict|set, pos_integer(), dict:dict()) -> dict:dict().
 update_stats(Name, Stat, N, Stats) ->
     NameBin = atom_to_binary(Name, latin1),
     StatBin = atom_to_binary(Stat, latin1),
